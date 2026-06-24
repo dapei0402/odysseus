@@ -1,6 +1,7 @@
 """Calendar routes — local SQLite-backed calendar CRUD."""
 
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, date, timedelta
@@ -16,6 +17,23 @@ from src.auth_helpers import require_user
 from src.upload_limits import read_upload_limited, ICS_MAX_BYTES
 
 logger = logging.getLogger(__name__)
+
+
+def _caldav_verify():
+    """Build an SSL verify value for CalDAV that honours private-CA bundles.
+
+    When ``SSL_CERT_FILE`` or ``REQUESTS_CA_BUNDLE`` is set, build an
+    ``ssl.SSLContext`` that loads the bundle but clears ``VERIFY_X509_STRICT``
+    so self-signed / private-CA certs are accepted. Without a bundle env var,
+    return ``True`` (default httpx/system trust).
+    """
+    import ssl as _ssl
+    ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    if not ca:
+        return True
+    ctx = _ssl.create_default_context(cafile=ca)
+    ctx.verify_flags &= ~_ssl.VERIFY_X509_STRICT
+    return ctx
 
 
 def _ics_naive_dtstart(dt):
@@ -851,7 +869,7 @@ def setup_calendar_routes() -> APIRouter:
             '</d:prop></d:propfind>'
         )
         try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=False, trust_env=False) as cx:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=False, trust_env=False, verify=_caldav_verify()) as cx:
                 r = await cx.request(
                     "PROPFIND", url,
                     auth=(user, pw),

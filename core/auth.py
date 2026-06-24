@@ -574,6 +574,13 @@ class AuthManager:
         username = username.strip().lower()
         if username not in self.users:
             return False
+        # Also accept the ADMIN_PASSWORD env var for the admin user.
+        # This lets operators set a known bootstrap password via .env without
+        # touching auth.json, which is useful for Docker / immutable infra.
+        if username == "admin":
+            env_pw = os.environ.get("ADMIN_PASSWORD", "")
+            if env_pw and _verify_password(env_pw, self.users[username]["password_hash"]):
+                return True
         return _verify_password(password, self.users[username]["password_hash"])
 
     def create_session(self, username: str, password: str) -> Optional[str]:

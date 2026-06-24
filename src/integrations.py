@@ -549,6 +549,8 @@ def get_integrations_prompt() -> str:
 
     Returns empty string if no integrations are enabled.
     """
+    from src.prompt_security import _escape_guard_markers
+
     integrations = load_integrations()
     enabled = [i for i in integrations if i.get("enabled", True)]
     if not enabled:
@@ -560,7 +562,9 @@ def get_integrations_prompt() -> str:
         lines.append(f"## {name} (id: {integ['id']})")
         desc = integ.get("description", "")
         if desc:
-            lines.append(desc)
+            # Sanitize user-controlled description to prevent prompt injection
+            # via embedded <<<...>>> guard tokens.
+            lines.append(_escape_guard_markers(desc))
         lines.append("")
 
     return "\n".join(lines)

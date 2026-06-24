@@ -12,6 +12,7 @@ import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.runtime_paths import get_app_root
+from src.prompt_security import _escape_guard_markers
 
 logger = logging.getLogger(__name__)
 
@@ -660,8 +661,10 @@ class McpManager:
             label = f"{server_name} ({identity})" if identity else server_name
             lines.append(f"\n**{label}:**")
             for t in server_tools:
-                # Truncate long descriptions
+                # Truncate long descriptions and escape guard markers to prevent
+                # prompt injection via malicious MCP tool descriptions (issue #4780).
                 desc = t['description'][:120] + '...' if len(t['description']) > 120 else t['description']
+                desc = _escape_guard_markers(desc)
                 # Include the tool's declared inputs so the model calls it with
                 # real argument names instead of guessing from the description
                 # alone (issue #2509).

@@ -1271,11 +1271,13 @@ def _build_system_prompt(
     if _inject_style and not suppress_local_context:
         try:
             from src.settings import load_settings as _load_settings
+            from src.prompt_security import _escape_guard_markers
             _style = (_load_settings().get("email_writing_style", "") or "").strip()
             if _style:
+                safe_style = _escape_guard_markers(_style)
                 agent_prompt += (
                     "\n\n📧 EMAIL WRITING STYLE AND IDENTITY — FOLLOW FOR ANY EMAIL DRAFT OR SEND:\n"
-                    f"{_style}\n\n"
+                    f"{safe_style}\n\n"
                     "Hard identity rule: write as the user/mailbox owner only. Do not sign as, speak as, "
                     "or imply you are the recipient, original sender, quoted sender, spouse, assistant, "
                     "company, or any other third party. If a signature is needed, use only the name/signature "

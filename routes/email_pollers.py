@@ -464,7 +464,9 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                     if att_text:
                         sys_prompt += "\n\nThe email has attachments (PDFs / docs) — their contents follow the body marked '--- ATTACHMENTS ---'. Reference them in your reply when relevant (e.g. acknowledge the invoice/contract, address specific clauses or amounts)."
                     if writing_style:
-                        sys_prompt += f"\n\nWRITING STYLE TO MATCH:\n{writing_style}"
+                        from src.prompt_security import _escape_guard_markers
+                        safe_style = _escape_guard_markers(writing_style)
+                        sys_prompt += f"\n\nWRITING STYLE TO MATCH:\n{safe_style}"
                     if context_snippets:
                         sys_prompt += "\n\nRELEVANT CONTEXT FROM PAST EMAILS AND CONTACTS:\n" + "\n\n---\n\n".join(context_snippets[:5])
                     try:

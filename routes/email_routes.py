@@ -3062,7 +3062,11 @@ def setup_email_routes():
 
             system_prompt = _EMAIL_REPLY_SYS_PROMPT_BASE
             if style:
-                system_prompt += f"\n\nWRITING STYLE TO MATCH:\n{style}"
+                # Sanitize user-controlled writing style to prevent prompt injection
+                # via embedded <<<...>>> guard tokens (issue #4780).
+                from src.prompt_security import _escape_guard_markers
+                safe_style = _escape_guard_markers(style)
+                system_prompt += f"\n\nWRITING STYLE TO MATCH:\n{safe_style}"
             if context_snippets:
                 system_prompt += "\n\nRELEVANT CONTEXT FROM PAST EMAILS AND CONTACTS:\n" + "\n\n---\n\n".join(context_snippets[:5])
             if referenced:

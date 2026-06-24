@@ -523,6 +523,9 @@ _NON_CHAT_EXACT_PREFIXES = (
 
 def _is_chat_model(model_id: str) -> bool:
     """Return True if the model ID looks like a chat/completions-capable model."""
+    # Guard against non-string model IDs from malformed upstream responses.
+    if not isinstance(model_id, str):
+        return True  # treat unknown types as chat-capable rather than dropping them
     mid = model_id.lower()
     for prefix in _NON_CHAT_PREFIXES:
         if mid.startswith(prefix):
@@ -748,7 +751,12 @@ def _probe_endpoint(base_url: str, api_key: str = None, timeout: int = 5) -> Lis
             r = httpx.get(url, headers=headers, timeout=timeout, verify=llm_verify())
             r.raise_for_status()
             data = r.json()
-            models = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+            # Guard: only process dict responses; non-dict JSON (list/string/null)
+            # is silently treated as "no models found" rather than crashing.
+            if isinstance(data, dict):
+                models = [m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and isinstance(m.get("id"), str) and m.get("id")]
+            else:
+                models = []
             if models:
                 return models
         except httpx.HTTPStatusError as e:
@@ -770,22 +778,26 @@ def _probe_endpoint(base_url: str, api_key: str = None, timeout: int = 5) -> Lis
         r.raise_for_status()
         data = r.json()
         # OpenAI format: {"data": [{"id": "model-name"}]}
-        models = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
-        # Ollama format: {"models": [{"name": "model-name"}]}
-        if not models:
-            models = [m.get("name") or m.get("model") for m in (data.get("models") or []) if m.get("name") or m.get("model")]
+        # Guard: only process dict responses; non-dict JSON is treated as empty.
+        if isinstance(data, dict):
+            models = [m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and isinstance(m.get("id"), str) and m.get("id")]
+            # Ollama format: {"models": [{"name": "model-name"}]}
+            if not models:
+                models = [m.get("name") or m.get("model") for m in (data.get("models") or []) if isinstance(m, dict) and isinstance(m.get("name") or m.get("model"), str) and (m.get("name") or m.get("model"))]
+        else:
+            models = []
         if models:
             # Z.AI coding plan omits some working models from /models;
             # append curated-only entries for that endpoint only.
             if _host_match(base, "z.ai") and "/api/coding" in (urlparse(base).path or ""):
                 _ck = _match_provider_curated(base, None)
                 for _e in _PROVIDER_CURATED.get(_ck, []):
-                    if _e not in set(models) and not any(m.startswith(_e) for m in models):
+                    if isinstance(_e, str) and _e not in set(models) and not any(isinstance(m, str) and m.startswith(_e) for m in models):
                         models.append(_e)
             if _host_match(base, "kimi.com") and "/coding" in (urlparse(base).path or ""):
                 _ck = _match_provider_curated(base, None)
                 for _e in _PROVIDER_CURATED.get(_ck, []):
-                    if _e not in set(models) and not any(m.startswith(_e) for m in models):
+                    if isinstance(_e, str) and _e not in set(models) and not any(isinstance(m, str) and m.startswith(_e) for m in models):
                         models.append(_e)
             return [m for m in models if _is_chat_model(m)]
     except httpx.HTTPStatusError as e:
@@ -812,7 +824,11 @@ def _probe_endpoint(base_url: str, api_key: str = None, timeout: int = 5) -> Lis
             r = httpx.get(root + "/api/tags", timeout=timeout, verify=llm_verify())
             r.raise_for_status()
             data = r.json()
-            models = [m.get("name") or m.get("model") for m in (data.get("models") or []) if m.get("name") or m.get("model")]
+            # Guard: only process dict responses.
+            if isinstance(data, dict):
+                models = [m.get("name") or m.get("model") for m in (data.get("models") or []) if isinstance(m, dict) and isinstance(m.get("name") or m.get("model"), str) and (m.get("name") or m.get("model"))]
+            else:
+                models = []
             if models:
                 return [m for m in models if _is_chat_model(m)]
     except Exception as e:

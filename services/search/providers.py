@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import ssl
 from typing import List, Optional
 from urllib.parse import urljoin, urlparse, parse_qs
 
@@ -14,6 +15,22 @@ from .analytics import RateLimitError, error_logger
 from .query import build_enhanced_query
 
 logger = logging.getLogger(__name__)
+
+
+def _searxng_verify():
+    """Build an SSL verify value for SearXNG that honours private-CA bundles.
+
+    When ``SSL_CERT_FILE`` or ``REQUESTS_CA_BUNDLE`` is set, build an
+    ``ssl.SSLContext`` that loads the bundle but clears ``VERIFY_X509_STRICT``
+    so self-signed / private-CA certs are accepted. Without a bundle env var,
+    return ``True`` (default httpx/system trust).
+    """
+    ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    if not ca:
+        return True
+    ctx = ssl.create_default_context(cafile=ca)
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
 
 # Provider registry — maps setting value to (label, needs_key, needs_url)
 PROVIDER_INFO = {
@@ -189,6 +206,7 @@ def searxng_search_api(query: str, count: Optional[int] = None, categories: str 
                 params=search_params,
                 headers=headers or None,
                 timeout=15,
+                verify=_searxng_verify(),
             )
             response.raise_for_status()
             data = response.json()
@@ -259,6 +277,7 @@ def searxng_search(query, max_results=10):
             params={"q": query, "safesearch": _safesearch_for("searxng")},
             headers=req_headers,
             timeout=10,
+            verify=_searxng_verify(),
         )
         if response.is_success:
             soup = BeautifulSoup(response.text, "html.parser")
